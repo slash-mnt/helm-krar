@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "krar.labels" $ | nindent 4 }}
 spec:
-  schedule: {{ $job.schedule }}
+  schedule: {{ $job.schedule | quote }}
   jobTemplate:
     metadata:
       {{- with $.Values.podAnnotations }}
@@ -84,7 +84,7 @@ spec:
                 {{- with $job.registry }}
                 {{- if eq .mode "authfile" }}
                 - name: KRAR_REGISTRY_AUTHFILE
-                  value: /run/authfile.json
+                  value: {{ .authfile }}
                 {{- end }}
                 {{- if eq .mode "creds" }}
                 - name: KRAR_REGISTRY_CREDS

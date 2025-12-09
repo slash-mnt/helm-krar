@@ -1,6 +1,6 @@
 {{- range $i, $job := $.Values.jobs }}
 {{- if not $job.filter.namespaces.all }}
-{{- range $j, $namespace := $job.filter.namespaces }}
+{{- range $j, $namespace := $job.filter.namespaces.specific }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -13,18 +13,18 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 rules:
-  - apiGroups: ["", "apps"]
+  - apiGroups: [ "apps" ]
     resources:
       {{- toYaml (append $job.filter.resources "replicasets") | nindent 6 }}
     verbs: ["get", "patch", "list"]
   - apiGroups: [ "" ]
     resources:
       - pods
-    verbs: [ "get", "list", "head", "watch" ]
+    verbs: [ "get", "list", "watch" ]
   - apiGroups: [ "" ]
     resources:
       - events
-    verbs: [ "get", "list", "create" ]
+    verbs: [ "create" ]
 
 ---
 {{- end }}

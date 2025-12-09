@@ -1,11 +1,11 @@
 {{- range $i, $job := $.Values.jobs }}
 {{- if not $job.filter.namespaces.all }}
-{{- range $j, $namespace := $job.filter.namespaces }}
+{{- range $j, $namespace := $job.filter.namespaces.specific }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "krar.roleName" $ }}-{{ $job.name }}
-  namespace: {{ $.Release.Namespace }}
+  namespace: {{ $namespace }}
   labels:
     {{- include "krar.labels" $ | nindent 4 }}
   {{- with $.Values.roleBindingAnnotations }}
@@ -19,7 +19,7 @@ roleRef:
 subjects:
   - kind: "ServiceAccount"
     name: {{ include "krar.serviceAccountName" $ }}-{{ $job.name }}
-    namespace: {{ $namespace }}
+    namespace: {{ $.Release.Namespace }}
 
 ---
 {{- end }}
