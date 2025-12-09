@@ -1,20 +1,22 @@
 {{- range $i, $job := $.Values.jobs }}
-{{- if $job.filter.namespaces.all }}
+{{- if not $job.filter.namespaces.all }}
+{{- range $j, $namespace := $job.filter.namespaces }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
-  name: {{ include "krar.clusterRoleName" $ }}-{{ $job.name }}
+  name: {{ include "krar.roleName" $ }}-{{ $job.name}}
+  namespace: {{ $namespace }}
   labels:
     {{- include "krar.labels" $ | nindent 4 }}
-  {{- with $.Values.clusterRoleAnnotations }}
+  {{- with $.Values.roleAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 rules:
-  - apiGroups: [ "", "apps" ]
+  - apiGroups: ["", "apps"]
     resources:
       {{- toYaml (append $job.filter.resources "replicasets") | nindent 6 }}
-    verbs: [ "get", "patch", "list" ]
+    verbs: ["get", "patch", "list"]
   - apiGroups: [ "" ]
     resources:
       - pods
@@ -25,5 +27,6 @@ rules:
     verbs: [ "get", "list", "create" ]
 
 ---
+{{- end }}
 {{- end }}
 {{- end }}

@@ -1,8 +1,7 @@
 image:
-  repository: alpine
+  repository: slashmnt/krar
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: 3.19.1
+  tag: 2.0.0
 
 imagePullSecrets: []
 nameOverride: ""
@@ -43,14 +42,31 @@ jobs:
         domain: krar.slash-mnt.com
         name: rollout-policy
         policyName: "" # Overrides the job name.
-      resources:
+      targets: []
+      # - name: ""
+      #   type: Deployment # or StatefulSet, DaemonSet
+      #   namespace: ""
+      resources: # For RBAC and pods discovery
         - deployments
         - statefulsets
         - daemonsets
       namespaces:
         all: true
         specific: []
-
-cluster:
-  kubernetes:
-    version: 1.17.5
+    mode: rollout
+    smartRestart: false # Ignored if mode isn't "smart".
+    registry:
+      mode: anonymous # anonymous, authfile, creds or config
+                      # refer to  for authfile mode
+      authfile: "" # Complete path to the config.json authfile
+      configPath: "" # Path to the directory containing a config.json file.
+      creds: ""
+    extraVolumes: []
+    #  - name: authfile
+    #    mountPath: /
+    #    readOnly: true
+    #    secret:
+    #      secretName: docker-authfile
+    #      items:
+    #        - key: config.json
+    #          path: config.json

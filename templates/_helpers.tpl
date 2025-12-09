@@ -63,3 +63,10 @@ Create the name of the cluster role to use
 {{- define "krar.clusterRoleName" -}}
 {{- default (include "krar.fullname" .) .Values.clusterRoleName }}
 {{- end }}
+
+{{/*
+Create the name of the cluster role to use
+*/}}
+{{- define "krar.roleName" -}}
+{{- default (include "krar.fullname" .) .Values.roleName }}
+{{- end }}

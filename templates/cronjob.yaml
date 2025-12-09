@@ -14,7 +14,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        slash-mnt.com/name: {{ $job.name }}
+        krar.slash-mnt.com/name: {{ $job.name }}
         {{- with $.Values.podLabels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -25,7 +25,7 @@ spec:
       template:
         metadata:
           labels:
-            slash-mnt.com/name: {{ $job.name }}
+            krar.slash-mnt.com/name: {{ $job.name }}
             {{- with $.Values.podLabels }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -37,56 +37,100 @@ spec:
           imagePullSecrets:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          serviceAccountName: {{ include "krar.serviceAccountName" $ }}
+          serviceAccountName: {{ include "krar.serviceAccountName" $ }}-{{ $job.name }}
           restartPolicy: "Never"
+          {{- with $.Values.podSecurityContext }}
           securityContext:
-            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           containers:
             - name: {{ $.Chart.Name }}
               image: {{ $.Values.image.repository }}:{{ $.Values.image.tag }}
               imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              {{- with $.Values.securityContext }}
               securityContext:
-                {{- toYaml $.Values.securityContext | nindent 16 }}
-              command:
-                - sh
-              args:
-                - -c
-                - |
-                  apk add --update --no-cache curl
-
-                  curl -LO https://storage.googleapis.com/kubernetes-release/release/v{{ $.Values.cluster.kubernetes.version }}/bin/linux/amd64/kubectl
-                  chmod u+x kubectl
-                  mv kubectl /bin/kubectl
-
-                  {{ if $job.filter.label.triggerValue }}
-                  FILTER="{{ $job.filter.label.domain }}/{{ $job.filter.label.name }}={{ $job.filter.label.policyName }}"
-                  {{ else }}
-                  FILTER="{{ $job.filter.label.domain }}/{{ $job.filter.label.name }}={{ $job.name }}"
-                  {{ end }}
-
-                  # Retrieve resources to rollout.
-                  {{ if $job.filter.namespaces.all }}
-                  echo "Retrieving {{ $job.filter.resources }} on all namespaces"
-                  kubectl get {{ join "," $job.filter.resources }} --all-namespaces --selector ${FILTER} --output yaml > resources.yaml
-                  {{ else }}
-                  {{- range $namespace := $job.filter.namespaces.specific }}
-                  echo "Retrieving {{ $job.filter.resources }} on namespace {{ $namespace }}"
-                  kubectl get {{ join "," $job.filter.resources }} --namespace={{ $namespace }} --selector ${FILTER} --output yaml >> resources.yaml
-                  {{- end }}
-                  {{ end }}
-                  # Rollout resources.
-                  kubectl rollout restart --filename ./resources.yaml
-              resources: {{ $.Values.resources }}
-              {{- with $.Values.nodeSelector }}
-              nodeSelector:
-                {{- toYaml . | nindent 12 }}
+                {{- toYaml . | nindent 16 }}
               {{- end }}
-              {{- with $.Values.affinity }}
-              affinity:
-                {{- toYaml . | nindent 12 }}
+              env:
+                - name: KRAR_RESOURCES
+                  value: {{ join "," $job.filter.resources | quote }}
+                - name: KRAR_LABEL_DOMAIN
+                  value: {{ $job.filter.label.domain | quote }}
+                {{- if $job.filter.targets }}
+                {{- $targets := list -}}
+                {{- range $job.filter.targets }}
+                  {{- $item := printf "%s/%s/%s" .namespace .type .name -}}
+                  {{- $targets = append $targets $item -}}
+                {{- end }}
+                - name: KRAR_TARGETS
+                  value: {{ join "," $targets | quote }}
+                {{- end }}
+                - name: KRAR_LABEL_NAME
+                  value: {{ $job.filter.label.name | quote }}
+                - name: KRAR_LABEL_VALUE
+                  value: {{ default $job.name $job.filter.label.policyName | quote }}
+                - name: KRAR_NAMESPACES_ALL
+                  value: {{ ternary "true" "false" $job.filter.namespaces.all | quote }}
+                - name: KRAR_NAMESPACES
+                  value: {{ join "," $job.filter.namespaces.specific | quote }}
+                - name: KRAR_JOB_NAME
+                  value: {{ $job.name | quote }}
+                - name: KRAR_MODE
+                  value: {{ $job.mode | quote }}
+                {{- if eq $job.mode "smart" }}
+                - name: KRAR_SMART_RESTART
+                  value: {{ $job.smartRestart | quote }}
+                {{- end }}
+                {{- with $job.registry }}
+                {{- if eq .mode "authfile" }}
+                - name: KRAR_REGISTRY_AUTHFILE
+                  value: /run/authfile.json
+                {{- end }}
+                {{- if eq .mode "creds" }}
+                - name: KRAR_REGISTRY_CREDS
+                  value: {{ .creds | quote }}
+                {{- end }}
+                {{- if and (eq .mode "config") .configPath }}
+                - name: KRAR_DOCKER_CONFIG
+                  value: {{ .configPath | quote }}
+                {{- end }}
+                {{- end }}
+              {{- if $job.extraVolumes }}
+              volumeMounts:
+              {{- range $j, $volume := default $job.extraVolumes list }}
+                - name: {{ $volume.name }}
+                  mountPath: {{ $volume.mountPath }}
+                  readOnly: {{ $volume.readOnly }}
               {{- end }}
-              {{- with $.Values.tolerations }}
-              tolerations:
-                {{- toYaml . | nindent 12 }}
               {{- end }}
+              {{- with $.Values.resources}}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- with $.Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $job.extraVolumes }}
+          volumes:
+          {{- range $j, $volume := default $job.extraVolumes list }}
+            - name: {{ $volume.name }}
+              {{- with $volume.secret }}
+              secret:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with $volume.configMap }}
+              configMap:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- end }}
+          {{- end }}
 {{- end }}
