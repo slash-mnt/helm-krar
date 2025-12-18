@@ -1,49 +1,86 @@
-![](./assets/logo-small.png)
+# Kubernetes Resources Auto Rollout (krar) — Helm chart
 
-# Kubernetes Resources Auto Rollout aka krar
+`helm-krar` is a lightweight Helm chart that installs **krar** (“Kubernetes Resources Auto Rollout”), a simple mechanism to **trigger rollouts on selected Kubernetes workloads** so that images referenced by **floating tags** (e.g., `1.25`, `1`, `latest`) are refreshed regularly.
 
-krar is a simple chart for refreshing images using floating tags on selected resources.
-Can be considered as a lightweight Keel alternative.
+It can be considered a lightweight alternative to tools like Keel for the specific “refresh floating tags” use case.
 
-The main use case is when your Kubernetes cluster is running applications/services using major or minor image
-versions (floating tags) you want up to date on the application behind, go to 
+For full application behavior and configuration semantics, see the upstream project: [**`slash-mnt/awesome-oci-images/tree/main/krar`**](https://github.com/slash-mnt/awesome-oci-images/tree/main/krar).
 
-For a full description look at the application sources [slash-mnt/krar](https://github.com/slash-mnt/awesome-oci-images/tree/main/krar).
+## What problem does this solve?
 
-> [!WARNING]
-> Triggering that restart affects resource availability if:
-> * There is only one replica of the resource,
-> * The image version is too open and brings breaking changes risk (like `latest` or usually major versions).
+Kubernetes does **not** automatically restart workloads when a tag is re-published in a registry (for example, `nginx:1.25` being updated).  
+krar periodically identifies marked resources and triggers a rollout so nodes re-pull images (when configured appropriately), keeping workloads aligned with the tag’s current digest.
+
+## Key warnings and constraints
+
+### Availability impact
+
+> [!WARNING] Triggering a restart affects availability if:
+>
+> - There is only **one replica** of the resource.
+> - The image tag is **too permissive** and may introduce breaking changes (e.g., `latest` or major version tags).
+
+### Required: `imagePullPolicy: Always`
 
 > [!IMPORTANT]
-> Only resources with `imagePullPolicy` set to `Always` will work.
+> Only workloads with `imagePullPolicy: Always` will behave as expected.
 
-It's possible to define multiple jobs to handle resources to restart in specific ways.
+### Current limitations
 
-krar doesn't log events clearly nor annotate restart resources yet.
+At the moment, krar:
 
-## What's inside?
+- Does not log events clearly
+- Does not annotate restarted resources
 
-**No dependency required.**
+## What’s inside this chart?
 
-* ServiceAccount
-* CluterRole/ClusterRoleBinding with GET, PATCH and LIST permissions on `""`, `"apps"` (deployments, daemonsets, statefulsets only)
-* As many CronJob you need
+No dependencies required. The chart installs:
 
-## How to mark my resource for automatic rollout?
+- Some **ServiceAccounts**
+- Wether  **ClusterRole / ClusterRoleBinding** or **Role(s) / RoleBinding(s)** with limited permissions on:
+  - core API group `""`, including only **Pods** and **Events**
+  - `apps` API group, limited to at max **Deployments**, **DaemonSets**, **StatefulSets** and **ReplicaSets**
+- One or more **CronJobs** (as many as you define) used to trigger rollouts
 
-With default values, you can add the following label on your `Deployment`, `DaemonSet` and `StatefulSet` resources:
+## Installation
+
+### Prerequisites
+
+- Kubernetes cluster with RBAC enabled
+- Helm 3.x
+
+### Install from a local clone
+
+```bash
+git clone https://github.com/slash-mnt/helm-krar.git
+cd helm-krar
+
+helm upgrade --install krar ./   --namespace krar   --create-namespace
+```
+
+### Install with custom values
+
+```bash
+helm upgrade --install krar ./   --namespace krar   --create-namespace   -f values.yaml
+```
+
+## How to mark resources for automatic rollout
+
+With default values, add the following label to your **Deployment**, **DaemonSet**, or **StatefulSet**:
 
 ```yaml
 krar.slash-mnt.com/rollout-policy: once-a-month
 ```
 
-to allow auto rollout using the job named `once-a-month`.
+This label associates the resource with the CronJob named `once-a-month`.
 
-Example:
+It's also possible to target resources directly instead of adding an annotation on resources.
+
+### Example (Deployment)
+
+Note: requires a ServiceAccount and its ClusterRole/Roles.
 
 ```yaml
-# From https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -62,10 +99,45 @@ spec:
         app: nginx
     spec:
       containers:
-      - name: nginx
-        image: nginx:1.25
-        ports:
-        - containerPort: 80
+        - name: nginx
+          image: nginx:1.25
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
 ```
 
-Customization can be done following the [application documentation](https://github.com/slash-mnt/awesome-oci-images/tree/main/krar).
+## Configuration
+
+Configuration is managed through `values.yaml`.
+
+The chart supports defining **multiple rollout jobs**, each with its own schedule and selection policy. This enables patterns such as:
+
+- Monthly refresh for low-risk services
+- Nightly refresh in non-production namespaces
+- Different policies per team or workload class
+
+Customization follows the **krar application documentation** (see upstream repository).
+
+For more information, please see [**`slash-mnt/awesome-oci-images/tree/main/krar`**](https://github.com/slash-mnt/awesome-oci-images/tree/main/krar).
+
+## Upgrading and uninstalling
+
+### Upgrade
+
+```bash
+helm upgrade krar ./ --namespace krar -f values.yaml
+```
+
+### Uninstall
+
+```bash
+helm uninstall krar --namespace krar
+```
+
+## License
+
+MIT. See `LICENSE`.
+
+## Maintainers
+
+Maintained by **SLASH MNT**.
