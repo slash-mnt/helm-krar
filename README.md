@@ -15,7 +15,8 @@ krar periodically identifies marked resources and triggers a rollout so nodes re
 
 ### Availability impact
 
-> [!WARNING] Triggering a restart affects availability if:
+> [!WARNING]
+> Triggering a restart affects availability if:
 >
 > - There is only **one replica** of the resource.
 > - The image tag is **too permissive** and may introduce breaking changes (e.g., `latest` or major version tags).
